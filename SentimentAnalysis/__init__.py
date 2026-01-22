@@ -1,0 +1,5 @@
+from .SentimentAnalysisFetcher import SentimentAnalysisFetcher
+from .SentimentTrendAnalysisFetcher import SentimentTrendAnalysisFetcher
+from .request import SentimentAnalysisRequest, SentimentTrendRequest
+from .response import SentimentAnalysisResponse, SentimentTrendResponse
+from .exceptions import SentimentFetcherError, SentimentConnectionError, SentimentPayloadError, SentimentResponseError

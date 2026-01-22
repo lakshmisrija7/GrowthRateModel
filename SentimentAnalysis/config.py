@@ -1,0 +1,4 @@
+URL = "wss://asense.assetsense.com/wsasense"
+HEADERS = {
+    "x-api-key": "2FDE23B4B72FF51D74A4402227E61AD246057783B364A7D527EEB16A5D41F45C"
+}
