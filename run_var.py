@@ -1,6 +1,33 @@
 import sys
 import os
 import logging
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
+async def fetch_overall_analysis_async(symbol: str, from_date: str, to_date: str) -> list:
+    from OverallAnalysis.client import OverallAnalysisClient
+    client = OverallAnalysisClient()
+    try:
+        await client.connect()
+        response = await client.fetch_overall_analysis(symbol, from_date, to_date)
+        return response.get_all_scores()
+    finally:
+        await client.disconnect()
+
+def fetch_overall_analysis(symbol: str, from_date: str, to_date: str) -> list:
+    try:
+        return asyncio.run(fetch_overall_analysis_async(symbol, from_date, to_date))
+    except RuntimeError:
+        def run_in_new_loop():
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                return new_loop.run_until_complete(fetch_overall_analysis_async(symbol, from_date, to_date))
+            finally:
+                new_loop.close()
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(run_in_new_loop)
+            return future.result()
 
 def main():
     symbols = ["UBER", "NVDA", "APP", "LLY", "AVGO"]
@@ -16,7 +43,7 @@ def main():
     client = VARWebSocketClient()
     tester = VARTester()
 
-    results_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "VARGrowthModel", "results")
+    results_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "VARGrowthModel", "results2")
 
     for symbol in symbols:
         print(f"\nFetching OHLCV data for {symbol}...")
@@ -27,12 +54,15 @@ def main():
             print(f"Error: No OHLCV data retrieved for {symbol} in the requested range.")
             continue
 
-        print(f"Successfully retrieved {len(ohlcv_list)} data points for {symbol}.")
+        print(f"Fetching overall analysis scores for {symbol}...")
+        scores_list = fetch_overall_analysis(symbol, from_date, to_date)
+
+        print(f"Successfully retrieved {len(ohlcv_list)} price points and {len(scores_list)} score points for {symbol}.")
         print(f"Running training and testing for {symbol}...")
-        metrics = tester.evaluate(ohlcv_list, results_dir=results_dir)
+        metrics = tester.evaluate(ohlcv_list, scores_list, results_dir=results_dir)
 
         print("\n" + "="*50)
-        print(f"VAR MODEL TEST REPORT - {symbol}")
+        print(f"VAR MODEL TEST REPORT (WITH SCORES) - {symbol}")
         print("="*50)
         print(f"Target Symbol:           {symbol}")
         print(f"Mean Squared Error:      {metrics['mse']:.8f}")

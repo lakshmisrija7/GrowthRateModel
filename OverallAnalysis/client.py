@@ -29,7 +29,7 @@ class OverallAnalysisClient:
                 headers["X_API_KEY"] = self.api_key
             self.connection = await websockets.connect(
                 self.url,
-                additional_headers=headers,
+                extra_headers=headers,
                 max_size=None
             )
             logger.info("Successfully connected to WebSocket")

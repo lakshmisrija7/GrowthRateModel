@@ -2,24 +2,26 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from .training import VARTrainer
+from .architecture import VectorAutoregressionModel
 from IntrinsicValueModels import DividendDiscountModel, DiscountedCashFlowModel
 
 class VARTester:
     def __init__(self, trainer: VARTrainer = None):
         self.trainer = trainer or VARTrainer()
 
-    def evaluate(self, ohlcv_list: list, results_dir: str = None) -> dict:
+    def evaluate(self, ohlcv_list: list, scores_list: list = None, results_dir: str = None) -> dict:
         if not ohlcv_list or len(ohlcv_list) <= self.trainer.lags:
             raise ValueError("No data or insufficient data available for testing")
 
-        df_growth = self.trainer.prepare_data(ohlcv_list)
+        df_growth = self.trainer.prepare_data(ohlcv_list, scores_list)
         n_samples = len(df_growth)
         train_size = int(n_samples * 0.8)
         
         train_np = df_growth.to_numpy()[:train_size]
         test_np = df_growth.to_numpy()[train_size:]
 
-        model = self.trainer.train(ohlcv_list[:train_size + self.trainer.lags])
+        model = VectorAutoregressionModel(lags=self.trainer.lags)
+        model.fit(train_np)
         
         test_steps = len(test_np)
         forecasts = model.forecast(train_np, steps=test_steps)
@@ -31,6 +33,9 @@ class VARTester:
         mse = np.mean((actual_close_growth - pred_close_growth) ** 2)
         mae = np.mean(np.abs(actual_close_growth - pred_close_growth))
 
+        full_model = VectorAutoregressionModel(lags=self.trainer.lags)
+        full_model.fit(df_growth.to_numpy())
+
         if results_dir:
             os.makedirs(results_dir, exist_ok=True)
             import pandas as pd
@@ -40,9 +45,7 @@ class VARTester:
             actual_prices = [item.close for item in ohlcv_list]
             actual_dates = [pd.to_datetime(item.time, unit="ms") for item in ohlcv_list]
 
-            full_model = self.trainer.train(ohlcv_list)
             lags = full_model.lags
-            
             predicted_prices = list(actual_prices)
             for t in range(lags, len(df_growth)):
                 row = [1.0]
@@ -80,7 +83,6 @@ class VARTester:
             plt.savefig(os.path.join(results_dir, f"{symbol}_forecast.png"), dpi=300)
             plt.close()
 
-        full_model = self.trainer.train(ohlcv_list)
         future_forecasts = full_model.forecast(df_growth.to_numpy(), steps=1260)
         
         annual_growths = []
