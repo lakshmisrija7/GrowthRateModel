@@ -29,6 +29,32 @@ def fetch_overall_analysis(symbol: str, from_date: str, to_date: str) -> list:
             future = executor.submit(run_in_new_loop)
             return future.result()
 
+async def fetch_fundamentals_async(symbol: str, from_date: str, to_date: str) -> list:
+    from FundamentalAnalysis.client import FundamentalWebSocketClient
+    from FundamentalAnalysis.config import WS_URL, API_KEY
+    client = FundamentalWebSocketClient(WS_URL, api_key=API_KEY)
+    try:
+        await client.connect()
+        response = await client.fetch_fundamentals(symbol, from_date, to_date)
+        return response.get_entries()
+    finally:
+        await client.disconnect()
+
+def fetch_fundamentals(symbol: str, from_date: str, to_date: str) -> list:
+    try:
+        return asyncio.run(fetch_fundamentals_async(symbol, from_date, to_date))
+    except RuntimeError:
+        def run_in_new_loop():
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                return new_loop.run_until_complete(fetch_fundamentals_async(symbol, from_date, to_date))
+            finally:
+                new_loop.close()
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(run_in_new_loop)
+            return future.result()
+
 def main():
     symbols = ["UBER", "NVDA", "APP", "LLY", "AVGO"]
     from_date = "1577836800000"
@@ -57,9 +83,12 @@ def main():
         print(f"Fetching overall analysis scores for {symbol}...")
         scores_list = fetch_overall_analysis(symbol, from_date, to_date)
 
-        print(f"Successfully retrieved {len(ohlcv_list)} price points and {len(scores_list)} score points for {symbol}.")
+        print(f"Fetching fundamental metrics for {symbol}...")
+        fundamental_list = fetch_fundamentals(symbol, from_date, to_date)
+
+        print(f"Successfully retrieved {len(ohlcv_list)} price points, {len(scores_list)} score points, and {len(fundamental_list)} fundamental reports for {symbol}.")
         print(f"Running training and testing for {symbol}...")
-        metrics = tester.evaluate(ohlcv_list, scores_list, results_dir=results_dir)
+        metrics = tester.evaluate(ohlcv_list, scores_list, fundamental_list, results_dir=results_dir)
 
         print("\n" + "="*50)
         print(f"VAR MODEL TEST REPORT (WITH SCORES) - {symbol}")

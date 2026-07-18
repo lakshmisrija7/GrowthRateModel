@@ -1,21 +1,26 @@
-import asyncio
 import datetime
-import json
+import logging
 import pandas as pd
 import websockets
-from FundamentalAnalysis.client import FundamentalWebSocketClient
-from TechnicalAnalysis.client import TechnicalWebSocketClient
-from SectorAnalysis.SectorAnalysisFetcher import SectorAnalysisFetcher
-from SentimentAnalysis.SentimentAnalysisFetcher import SentimentAnalysisFetcher
-from OverallAnalysis.client import OverallAnalysisClient
-from .config import WS_URL, API_KEY, DEFAULT_SYMBOL, FALLBACK_SYMBOL
+import json
+import numpy as np
 from .logger import get_logger
-from .exceptions import ResponseError
+from .exceptions import ConnectionError, RequestError, ResponseError
+from TechnicalAnalysis import TechnicalWebSocketClient
+from FundamentalAnalysis import FundamentalWebSocketClient
+from SectorAnalysis import SectorAnalysisFetcher
+from SentimentAnalysis import SentimentAnalysisFetcher
+from OverallAnalysis import OverallAnalysisClient
+from MidasRegressionMetricModel import MidasRegression
+from DynamicFactorModelKalmanFilteringMetricModel import KalmanDFM
 
 logger = get_logger(__name__)
 
+WS_URL = "wss://app.asense.ai/wsasense"
+FALLBACK_SYMBOL = "NVDA"
+
 class ARIMADataLoader:
-    def __init__(self, symbol: str = DEFAULT_SYMBOL, api_key: str = API_KEY):
+    def __init__(self, symbol: str, api_key: str = "2FDE23B4B72FF51D74A4402227E61AD246057783B364A7D527EEB16A5D41F45C"):
         self.symbol = symbol
         self.company_name = symbol
         self.api_key = api_key
@@ -23,8 +28,7 @@ class ARIMADataLoader:
     async def _fetch_ohlcv_data(self, symbol: str, from_date: str, to_date: str, real_time: bool = True) -> list:
         headers = {}
         if self.api_key:
-            headers["X-API-KEY"] = self.api_key
-            headers["X_API_KEY"] = self.api_key
+            headers["x-api-key"] = self.api_key
         try:
             async with websockets.connect(WS_URL, extra_headers=headers, max_size=None, ping_interval=None) as ws:
                 req = {
@@ -50,18 +54,18 @@ class ARIMADataLoader:
     async def load_and_align_data(self, from_date: int, to_date: int) -> pd.DataFrame:
         logger.info(f"Attempting to load data for symbol {self.symbol} from {from_date} to {to_date}")
         
-        ohlcv_current = await self._fetch_ohlcv_data(self.symbol, from_date, to_date)
+        ohlcv_current = await self._fetch_ohlcv_data(self.symbol, from_date, to_date, real_time=False)
         if not ohlcv_current:
             logger.warning(f"No OHLCV data returned for symbol {self.symbol}. Falling back to {FALLBACK_SYMBOL}!")
             self.symbol = FALLBACK_SYMBOL
             self.company_name = FALLBACK_SYMBOL
-            ohlcv_current = await self._fetch_ohlcv_data(self.symbol, from_date, to_date)
+            ohlcv_current = await self._fetch_ohlcv_data(self.symbol, from_date, to_date, real_time=False)
             if not ohlcv_current:
                 raise ResponseError("No OHLCV data found for either primary or fallback symbols.")
             
-        ms_5y = 5 * 365 * 24 * 60 * 60 * 1000
-        from_date_5y_fwd = from_date + ms_5y
-        to_date_5y_fwd = to_date + ms_5y
+        ms_2y = 2 * 365 * 24 * 60 * 60 * 1000
+        from_date_5y_fwd = from_date + ms_2y
+        to_date_5y_fwd = to_date + ms_2y
         ohlcv_5y_forward = await self._fetch_ohlcv_data(self.symbol, from_date_5y_fwd, to_date_5y_fwd, real_time=False)
         
         daily_closes_curr = {}
@@ -154,7 +158,6 @@ class ARIMADataLoader:
             })
         df_sent = pd.DataFrame(sent_list)
 
-        # --- Overall Analysis ---
         overall_client = OverallAnalysisClient(url=WS_URL, api_key=self.api_key)
         overall_list = []
         try:
@@ -195,13 +198,40 @@ class ARIMADataLoader:
         df_align = pd.DataFrame({"date": timeline})
         
         df_align = df_align.merge(df_tech, on="date", how="left")
+
+        close_series = pd.Series(daily_closes_curr).sort_index()
+        daily_returns = close_series.pct_change().fillna(0.0)
+
+        sparse_df = pd.DataFrame(index=daily_returns.index)
+        for col in ["fund_cashHealth", "fund_leverage", "fund_liquidity", "fund_profitability"]:
+            sparse_df[col] = np.nan
         
         if not df_fund.empty:
-            df_align = df_align.merge(df_fund, on="date", how="left")
-        else:
-            for col in ["fund_cashHealth", "fund_leverage", "fund_liquidity", "fund_profitability"]:
-                df_align[col] = None
-                
+            for _, row in df_fund.iterrows():
+                d = row["date"]
+                if d in sparse_df.index:
+                    sparse_df.loc[d, "fund_cashHealth"] = row["fund_cashHealth"]
+                    sparse_df.loc[d, "fund_leverage"] = row["fund_leverage"]
+                    sparse_df.loc[d, "fund_liquidity"] = row["fund_liquidity"]
+                    sparse_df.loc[d, "fund_profitability"] = row["fund_profitability"]
+
+        nowcast_df = pd.DataFrame(index=daily_returns.index)
+        for col in ["fund_cashHealth", "fund_leverage", "fund_liquidity", "fund_profitability"]:
+            sparse_series = sparse_df[col]
+            midas = MidasRegression(lag_length=60)
+            midas.fit(daily_returns, sparse_series)
+            pred_midas = midas.predict(daily_returns)
+            
+            kalman = KalmanDFM()
+            pred_kalman = kalman.fit_and_filter(daily_returns, sparse_series)
+            
+            nowcast_df[col] = 0.5 * pred_midas + 0.5 * pred_kalman
+
+        new_fundamental_score = nowcast_df.mean(axis=1)
+        df_fund_nowcast = nowcast_df.reset_index().rename(columns={"index": "date"})
+
+        df_align = df_align.merge(df_fund_nowcast, on="date", how="left")
+        
         if not df_sec.empty:
             df_align = df_align.merge(df_sec, on="date", how="left")
         else:
@@ -223,6 +253,13 @@ class ARIMADataLoader:
         else:
             for col in overall_cols:
                 df_align[col] = None
+
+        new_fund_score_df = pd.DataFrame({
+            "date": new_fundamental_score.index,
+            "overall_fundamentalScore": new_fundamental_score.values
+        })
+        df_align = df_align.drop(columns=["overall_fundamentalScore"], errors="ignore")
+        df_align = df_align.merge(new_fund_score_df, on="date", how="left")
                 
         df_align = df_align.ffill().bfill()
         
@@ -236,7 +273,7 @@ class ARIMADataLoader:
             d = row["date"]
             close_curr = daily_closes_curr[d]
             
-            d_5y_fwd_target = d + datetime.timedelta(days=5*365)
+            d_5y_fwd_target = d + datetime.timedelta(days=2*365)
             if not dates_5y_fwd:
                 growths.append(None)
                 aligned_close_curr.append(close_curr)

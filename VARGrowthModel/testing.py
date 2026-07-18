@@ -9,11 +9,11 @@ class VARTester:
     def __init__(self, trainer: VARTrainer = None):
         self.trainer = trainer or VARTrainer()
 
-    def evaluate(self, ohlcv_list: list, scores_list: list = None, results_dir: str = None) -> dict:
+    def evaluate(self, ohlcv_list: list, scores_list: list = None, fundamental_list: list = None, results_dir: str = None) -> dict:
         if not ohlcv_list or len(ohlcv_list) <= self.trainer.lags:
             raise ValueError("No data or insufficient data available for testing")
 
-        df_growth = self.trainer.prepare_data(ohlcv_list, scores_list)
+        df_growth = self.trainer.prepare_data(ohlcv_list, scores_list, fundamental_list)
         n_samples = len(df_growth)
         train_size = int(n_samples * 0.8)
         
