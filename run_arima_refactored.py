@@ -13,7 +13,10 @@ TO_DATE   = 1577836800000
 FEATURE_COLS = [
     "tech_trend", "tech_momentum", "tech_volatility", "tech_rsi", "tech_adx",
     "sec_pe", "sec_roe", "sec_npm", "sec_sector_pe", "sec_sector_roe",
-    "sent_score", "sent_confidence"
+    "sent_score", "sent_confidence",
+    # Overall Analysis scores
+    "overall_overallScore", "overall_technicalScore", "overall_fundamentalScore",
+    "overall_sentimentScore", "overall_industryScore", "overall_riskScore",
 ]
 FUND_COLS = ["fund_cashHealth", "fund_leverage", "fund_liquidity", "fund_profitability"]
 

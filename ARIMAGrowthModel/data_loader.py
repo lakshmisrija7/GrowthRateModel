@@ -7,6 +7,7 @@ from FundamentalAnalysis.client import FundamentalWebSocketClient
 from TechnicalAnalysis.client import TechnicalWebSocketClient
 from SectorAnalysis.SectorAnalysisFetcher import SectorAnalysisFetcher
 from SentimentAnalysis.SentimentAnalysisFetcher import SentimentAnalysisFetcher
+from OverallAnalysis.client import OverallAnalysisClient
 from .config import WS_URL, API_KEY, DEFAULT_SYMBOL, FALLBACK_SYMBOL
 from .logger import get_logger
 from .exceptions import ResponseError
@@ -153,6 +154,43 @@ class ARIMADataLoader:
             })
         df_sent = pd.DataFrame(sent_list)
 
+        # --- Overall Analysis ---
+        overall_client = OverallAnalysisClient(url=WS_URL, api_key=self.api_key)
+        overall_list = []
+        try:
+            await overall_client.connect()
+            overall_resp = await overall_client.fetch_overall_analysis(
+                self.symbol,
+                from_date=str(wide_from),
+                to_date=str(wide_to)
+            )
+            for entry in overall_resp.get_entries():
+                scores = overall_resp.get_scores(entry)
+                ts = scores.get("timestamp")
+                if ts is None:
+                    continue
+                dt = datetime.datetime.fromtimestamp(ts / 1000, datetime.timezone.utc).date()
+                def _safe_float(v):
+                    try:
+                        return float(v)
+                    except (TypeError, ValueError):
+                        return None
+                overall_list.append({
+                    "date":                   dt,
+                    "overall_overallScore":   _safe_float(scores.get("overallScore")),
+                    "overall_technicalScore": _safe_float(scores.get("technicalScore")),
+                    "overall_fundamentalScore": _safe_float(scores.get("fundamentalScore")),
+                    "overall_sentimentScore": _safe_float(scores.get("sentimentScore")),
+                    "overall_industryScore":  _safe_float(scores.get("industryScore")),
+                    "overall_riskScore":      _safe_float(scores.get("riskScore")),
+                })
+        except Exception as e:
+            logger.warning(f"Overall analysis fetch failed for {self.symbol}: {e}")
+        finally:
+            await overall_client.disconnect()
+        df_overall = pd.DataFrame(overall_list)
+        logger.info(f"Loaded {len(overall_list)} overall analysis entries for {self.symbol}")
+
         timeline = sorted(list(daily_closes_curr.keys()))
         df_align = pd.DataFrame({"date": timeline})
         
@@ -174,6 +212,16 @@ class ARIMADataLoader:
             df_align = df_align.merge(df_sent, on="date", how="left")
         else:
             for col in ["sent_score", "sent_confidence"]:
+                df_align[col] = None
+
+        overall_cols = [
+            "overall_overallScore", "overall_technicalScore", "overall_fundamentalScore",
+            "overall_sentimentScore", "overall_industryScore", "overall_riskScore"
+        ]
+        if not df_overall.empty:
+            df_align = df_align.merge(df_overall, on="date", how="left")
+        else:
+            for col in overall_cols:
                 df_align[col] = None
                 
         df_align = df_align.ffill().bfill()
