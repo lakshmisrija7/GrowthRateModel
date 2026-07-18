@@ -47,7 +47,7 @@ async def run_symbol(symbol: str):
         logger.info(f"[{symbol}] === ARIMA Report ===")
         logger.info(f"[{symbol}] In-Sample MSE: {report['mse']:.6f}")
         logger.info(f"[{symbol}] In-Sample MAE: {report['mae']:.6f}")
-        logger.info(f"[{symbol}] Forecasted Annual Growth Rates (5 Yrs): {report['forecasted_growth_rates']}")
+        logger.info(f"[{symbol}] Forecasted Annual Growth Rates (2 Yrs): {report['forecasted_growth_rates']}")
         logger.info(f"[{symbol}] DCF Intrinsic Value: ${report['intrinsic_value']:.2f}")
         logger.info(f"[{symbol}] Plot saved to results/{symbol}_valuation_forecast.png")
 

@@ -20,7 +20,8 @@ class VARTester:
         train_np = df_growth.to_numpy()[:train_size]
         test_np = df_growth.to_numpy()[train_size:]
 
-        model = VectorAutoregressionModel(lags=self.trainer.lags)
+        lags_train = self.trainer.tune_lags(train_np)
+        model = VectorAutoregressionModel(lags=lags_train)
         model.fit(train_np)
         
         test_steps = len(test_np)
@@ -33,7 +34,8 @@ class VARTester:
         mse = np.mean((actual_close_growth - pred_close_growth) ** 2)
         mae = np.mean(np.abs(actual_close_growth - pred_close_growth))
 
-        full_model = VectorAutoregressionModel(lags=self.trainer.lags)
+        lags_full = self.trainer.tune_lags(df_growth.to_numpy())
+        full_model = VectorAutoregressionModel(lags=lags_full)
         full_model.fit(df_growth.to_numpy())
 
         if results_dir:
@@ -55,7 +57,7 @@ class VARTester:
                 pred_close_g = pred_growth[close_idx]
                 predicted_prices[t + 1] = ohlcv_list[t].close * (1.0 + pred_close_g)
 
-            future_forecasts = full_model.forecast(df_growth.to_numpy(), steps=1260)
+            future_forecasts = full_model.forecast(df_growth.to_numpy(), steps=504)
             current_price = predicted_prices[-1]
             for pred_g in future_forecasts[:, close_idx]:
                 next_price = current_price * (1.0 + pred_g)
@@ -63,7 +65,7 @@ class VARTester:
                 current_price = next_price
 
             last_date = actual_dates[-1]
-            future_dates = pd.date_range(start=last_date + pd.offsets.BDay(), periods=1260, freq="B")
+            future_dates = pd.date_range(start=last_date + pd.offsets.BDay(), periods=504, freq="B")
             predicted_dates = actual_dates + list(future_dates)
 
             plt.figure(figsize=(16, 6))
@@ -83,10 +85,10 @@ class VARTester:
             plt.savefig(os.path.join(results_dir, f"{symbol}_forecast.png"), dpi=300)
             plt.close()
 
-        future_forecasts = full_model.forecast(df_growth.to_numpy(), steps=1260)
+        future_forecasts = full_model.forecast(df_growth.to_numpy(), steps=504)
         
         annual_growths = []
-        for year in range(5):
+        for year in range(2):
             start_idx = year * 252
             end_idx = (year + 1) * 252
             year_forecasts = future_forecasts[start_idx:end_idx, close_idx]
@@ -104,7 +106,7 @@ class VARTester:
         ddm_val = ddm.calculate_constant_growth(growth_rate=ddm_g)
         dcf_val = dcf.calculate_valuation(
             growth_rates=dcf_rates,
-            forecast_years=5,
+            forecast_years=2,
             terminal_growth_rate=0.03,
             net_debt=200.0,
             shares_outstanding=10.0

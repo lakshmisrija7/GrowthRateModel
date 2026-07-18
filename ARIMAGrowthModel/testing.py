@@ -27,20 +27,20 @@ class ARIMATester:
         mae = float(np.mean(np.abs(errors)))
         
         last_exog = df[feature_cols].iloc[-1]
-        forecast_steps = 1260
-        logger.info(f"Forecasting {forecast_steps} daily steps (5 years) into the future")
+        forecast_steps = 504
+        logger.info(f"Forecasting {forecast_steps} daily steps (2 years) into the future")
         forecast_daily = self.model_arch.forecast_out_of_sample(forecast_steps, last_exog)
         
         annual_growth_rates = []
-        for i in range(5):
+        for i in range(2):
             segment_mean = float(forecast_daily.iloc[i * 252:(i + 1) * 252].mean())
             annual_growth_rates.append(segment_mean)
-        logger.info(f"Calculated 5-year forecasted annual growth rates: {annual_growth_rates}")
+        logger.info(f"Calculated 2-year forecasted annual growth rates: {annual_growth_rates}")
 
         dcf = DiscountedCashFlowModel(initial_fcf=150.0, discount_rate=0.09)
         intrinsic_val = dcf.calculate_valuation(
             growth_rates=annual_growth_rates,
-            forecast_years=5,
+            forecast_years=2,
             terminal_growth_rate=0.03,
             net_debt=200.0,
             shares_outstanding=10.0
@@ -56,14 +56,14 @@ class ARIMATester:
         max_date = df["date"].max()
         max_dt = datetime.datetime.combine(max_date, datetime.time.min, tzinfo=datetime.timezone.utc)
         to_date_ms = int(max_dt.timestamp() * 1000)
-        ms_5y = 5 * 365 * 24 * 60 * 60 * 1000
+        ms_2y = 2 * 365 * 24 * 60 * 60 * 1000
         future_from_ms = to_date_ms
-        future_to_ms = to_date_ms + ms_5y
-        future_5y_fwd_to_ms = future_to_ms + ms_5y
+        future_to_ms = to_date_ms + ms_2y
+        future_2y_fwd_to_ms = future_to_ms + ms_2y
 
-        logger.info(f"Fetching future base window {future_from_ms} to {future_to_ms} and forward window {future_to_ms} to {future_5y_fwd_to_ms} for {loader.symbol}")
+        logger.info(f"Fetching future base window {future_from_ms} to {future_to_ms} and forward window {future_to_ms} to {future_2y_fwd_to_ms} for {loader.symbol}")
         ohlcv_future_base = await loader._fetch_ohlcv_data(loader.symbol, future_from_ms, future_to_ms, real_time=False)
-        ohlcv_future_fwd = await loader._fetch_ohlcv_data(loader.symbol, future_to_ms, future_5y_fwd_to_ms, real_time=False)
+        ohlcv_future_fwd = await loader._fetch_ohlcv_data(loader.symbol, future_to_ms, future_2y_fwd_to_ms, real_time=False)
 
         daily_closes_future_base = {}
         for item in ohlcv_future_base:
@@ -83,11 +83,11 @@ class ARIMATester:
         out_predicted = []
 
         for i, (d, close_d) in enumerate(sorted(daily_closes_future_base.items())):
-            d_5y_fwd_target = d + datetime.timedelta(days=5 * 365)
+            d_2y_fwd_target = d + datetime.timedelta(days=2 * 365)
             actual_growth = None
             if dates_fwd:
-                closest_d = min(dates_fwd, key=lambda x: abs((x - d_5y_fwd_target).days))
-                if abs((closest_d - d_5y_fwd_target).days) <= MAX_FORWARD_TOLERANCE_DAYS:
+                closest_d = min(dates_fwd, key=lambda x: abs((x - d_2y_fwd_target).days))
+                if abs((closest_d - d_2y_fwd_target).days) <= MAX_FORWARD_TOLERANCE_DAYS:
                     actual_growth = (daily_closes_future_fwd[closest_d] - close_d) / close_d
 
             out_dates.append(pd.Timestamp(d))
@@ -152,9 +152,9 @@ class ARIMATester:
         ax.xaxis.set_major_locator(mdates.MonthLocator(interval=6))
         fig.autofmt_xdate(rotation=45)
 
-        ax.set_title(f"ARIMA: Actual vs Predicted 5-Year Forward Growth Rate ({symbol}, from 2015)")
+        ax.set_title(f"ARIMA: Actual vs Predicted 2-Year Forward Growth Rate ({symbol}, from 2015)")
         ax.set_xlabel("Date")
-        ax.set_ylabel("5-Year Forward Growth Rate")
+        ax.set_ylabel("2-Year Forward Growth Rate")
         ax.legend()
         ax.grid(True, linestyle=":", alpha=0.5)
 
@@ -162,4 +162,3 @@ class ARIMATester:
         plt.savefig(plot_path, dpi=300, bbox_inches="tight")
         plt.close()
         logger.info(f"Saved visualization results plot to: {plot_path}")
-

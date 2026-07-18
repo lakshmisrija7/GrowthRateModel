@@ -26,7 +26,7 @@ class ARIMADataLoader:
             headers["X-API-KEY"] = self.api_key
             headers["X_API_KEY"] = self.api_key
         try:
-            async with websockets.connect(WS_URL, additional_headers=headers, max_size=None, ping_interval=None) as ws:
+            async with websockets.connect(WS_URL, extra_headers=headers, max_size=None, ping_interval=None) as ws:
                 req = {
                     "type": "ohlcvData",
                     "action": "GET_OHLCV_DATA",

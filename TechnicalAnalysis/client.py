@@ -21,7 +21,7 @@ class TechnicalWebSocketClient:
             if self.api_key:
                 headers["X-API-KEY"] = self.api_key
                 headers["X_API_KEY"] = self.api_key
-            self.connection = await websockets.connect(self.url, additional_headers=headers, max_size=None)
+            self.connection = await websockets.connect(self.url, extra_headers=headers, max_size=None)
             logger.info("Successfully connected to WebSocket")
         except Exception as e:
             logger.error(f"Failed to connect to {self.url}: {e}")

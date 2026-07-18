@@ -27,6 +27,22 @@ class ARIMAModelArchitecture:
             self.fitted_features = list(exog.columns)
             logger.info(f"Filtered training features: {self.fitted_features}")
 
+        best_aic = float("inf")
+        best_order = (self.p, self.d, self.q)
+        for p in [1, 2]:
+            for d in [0, 1]:
+                for q in [0, 1]:
+                    try:
+                        temp_model = ARIMA(endog, order=(p, d, q), exog=exog)
+                        temp_fit = temp_model.fit()
+                        if temp_fit.aic < best_aic:
+                            best_aic = temp_fit.aic
+                            best_order = (p, d, q)
+                    except Exception:
+                        continue
+        self.p, self.d, self.q = best_order
+        logger.info(f"Tuned ARIMA parameters: p={self.p}, d={self.d}, q={self.q} (AIC={best_aic:.2f})")
+
         try:
             model = ARIMA(endog, order=(self.p, self.d, self.q), exog=exog)
             self.model_fit = model.fit()
@@ -48,8 +64,8 @@ class ARIMAModelArchitecture:
             raise ValuationError("Model has not been trained yet")
 
         n = len(endog)
-        FORECAST_HORIZON = 1260   # 5 years in trading days
-        STEP = 5                  # refit every 5 days, then interpolate
+        FORECAST_HORIZON = 504
+        STEP = 5
         min_train = max(self.p + self.q + 2, 10)
 
         exog = exog_full[self.fitted_features].fillna(0.0) if self.fitted_features else None

@@ -73,7 +73,7 @@ def main():
         for day, g in enumerate(metrics['daily_forecasts'], 1):
             print(f"Day {day:02d}:                  {g*100:+.6f}%")
         print("="*50)
-        print("5-YEAR GROWTH RATE PREDICTIONS (ANNUAL)")
+        print("24-MONTH GROWTH RATE PREDICTIONS (ANNUAL)")
         print("="*50)
         for year, g in enumerate(metrics['annual_growths'], 1):
             print(f"Year {year}:                 {g*100:+.0f}%")

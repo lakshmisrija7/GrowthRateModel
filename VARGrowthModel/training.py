@@ -63,8 +63,38 @@ class VARTrainer:
 
         return df_merged
 
+    def tune_lags(self, data: np.ndarray) -> int:
+        best_lag = 5
+        best_val_mse = float("inf")
+        n_samples = len(data)
+        split_idx = int(n_samples * 0.8)
+        train_data = data[:split_idx]
+        val_data = data[split_idx:]
+        for lag in range(1, 11):
+            if len(train_data) <= lag or len(val_data) <= lag:
+                continue
+            try:
+                temp_model = VectorAutoregressionModel(lags=lag)
+                temp_model.fit(train_data)
+                val_errors = []
+                for t in range(lag, len(val_data)):
+                    row = [1.0]
+                    for l in range(1, lag + 1):
+                        row.extend(val_data[t - l])
+                    pred = np.array(row) @ temp_model.coefficients
+                    val_errors.append(val_data[t] - pred)
+                val_mse = np.mean(np.array(val_errors) ** 2)
+                if val_mse < best_val_mse:
+                    best_val_mse = val_mse
+                    best_lag = lag
+            except Exception:
+                continue
+        return best_lag
+
     def train(self, ohlcv_list: list, scores_list: list = None) -> VectorAutoregressionModel:
         df_growth = self.prepare_data(ohlcv_list, scores_list)
+        data = df_growth.to_numpy()
+        self.lags = self.tune_lags(data)
         model = VectorAutoregressionModel(lags=self.lags)
-        model.fit(df_growth.to_numpy())
+        model.fit(data)
         return model
