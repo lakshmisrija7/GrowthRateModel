@@ -33,12 +33,12 @@ class FundamentalResponse:
         for entry in self.get_entries():
             bs = entry.get("balanceSheet", {})
             if bs.get("date") == period:
-                analysis = entry.get("analysis", {})
-                ai_summary = analysis.get("aiSummary", {})
+                analysis = entry.get("analysis") or {}
+                ai_summary = analysis.get("aiSummary") or {}
                 for key in ("cashHealthScore", "leverageScore", "liquidityScore", "profitabilityScore"):
                     if key in ai_summary:
                         scores[key] = ai_summary[key]
-                detail_scores = analysis.get("scores", {})
+                detail_scores = analysis.get("scores") or {}
                 for sheet_name, sheet_data in detail_scores.items():
                     if not isinstance(sheet_data, dict):
                         continue

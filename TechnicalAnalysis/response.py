@@ -6,7 +6,6 @@ from .config import (
     ADXConfig,
     BollingerConfig,
     MACDConfig,
-    StochasticConfig,
     ScorerConfig
 )
 
