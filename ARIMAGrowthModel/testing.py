@@ -49,6 +49,7 @@ class ARIMATester:
 
         df_insample = pd.DataFrame({
             "date": pd.to_datetime(df["date"].values),
+            "close_curr": df["close_curr"].values,
             "actual_growth": endog.values,
             "predicted_growth": predictions.values
         })
@@ -79,6 +80,7 @@ class ARIMATester:
 
         forecast_list = list(forecast_daily)
         out_dates = []
+        out_close_curr = []
         out_actual = []
         out_predicted = []
 
@@ -91,11 +93,13 @@ class ARIMATester:
                     actual_growth = (daily_closes_future_fwd[closest_d] - close_d) / close_d
 
             out_dates.append(pd.Timestamp(d))
+            out_close_curr.append(close_d)
             out_actual.append(actual_growth)
             out_predicted.append(forecast_list[i] if i < len(forecast_list) else None)
 
         df_outsample = pd.DataFrame({
             "date": out_dates,
+            "close_curr": out_close_curr,
             "actual_growth": out_actual,
             "predicted_growth": out_predicted
         })
@@ -113,32 +117,32 @@ class ARIMATester:
         }
 
     def _save_results_plot(self, df_insample: pd.DataFrame, df_outsample: pd.DataFrame, symbol: str = "STOCK"):
-        results_dir = os.path.join(os.path.dirname(__file__), "results")
+        results_dir = os.path.join(os.path.dirname(__file__), "price_comparison_results")
         os.makedirs(results_dir, exist_ok=True)
-        plot_path = os.path.join(results_dir, f"{symbol}_valuation_forecast.png")
+        plot_path = os.path.join(results_dir, f"{symbol}_price_comparison.png")
 
         fig, ax = plt.subplots(figsize=(16, 6))
 
         ax.plot(
-            df_insample["date"], df_insample["actual_growth"],
-            label="Actual Growth Rate", color="steelblue", alpha=0.8, linewidth=1.2
+            df_insample["date"], df_insample["close_curr"] * (1.0 + df_insample["actual_growth"]),
+            label="Actual Stock Price (2-Yr Fwd)", color="steelblue", alpha=0.8, linewidth=1.2
         )
         ax.plot(
-            df_insample["date"], df_insample["predicted_growth"],
-            label="Predicted Growth Rate", color="tomato", linestyle="--", alpha=0.85, linewidth=1.2
+            df_insample["date"], df_insample["close_curr"] * (1.0 + df_insample["predicted_growth"]),
+            label="Predicted Stock Price (2-Yr Fwd)", color="tomato", linestyle="--", alpha=0.85, linewidth=1.2
         )
 
         df_out_valid_actual = df_outsample.dropna(subset=["actual_growth"])
         if not df_out_valid_actual.empty:
             ax.plot(
-                df_out_valid_actual["date"], df_out_valid_actual["actual_growth"],
+                df_out_valid_actual["date"], df_out_valid_actual["close_curr"] * (1.0 + df_out_valid_actual["actual_growth"]),
                 color="steelblue", alpha=0.8, linewidth=1.2
             )
 
         df_out_pred = df_outsample.dropna(subset=["predicted_growth"])
         if not df_out_pred.empty:
             ax.plot(
-                df_out_pred["date"], df_out_pred["predicted_growth"],
+                df_out_pred["date"], df_out_pred["close_curr"] * (1.0 + df_out_pred["predicted_growth"]),
                 color="tomato", linestyle="--", alpha=0.85, linewidth=1.2
             )
 
@@ -152,13 +156,13 @@ class ARIMATester:
         ax.xaxis.set_major_locator(mdates.MonthLocator(interval=6))
         fig.autofmt_xdate(rotation=45)
 
-        ax.set_title(f"ARIMA: Actual vs Predicted 2-Year Forward Growth Rate ({symbol}, from 2015)")
+        ax.set_title(f"ARIMA: Actual vs Predicted 2-Year Forward Stock Price ({symbol}, from 2015)")
         ax.set_xlabel("Date")
-        ax.set_ylabel("2-Year Forward Growth Rate")
+        ax.set_ylabel("Stock Price (USD)")
         ax.legend()
         ax.grid(True, linestyle=":", alpha=0.5)
 
         plt.tight_layout()
         plt.savefig(plot_path, dpi=300, bbox_inches="tight")
         plt.close()
-        logger.info(f"Saved visualization results plot to: {plot_path}")
+        logger.info(f"Saved price comparison plot to: {plot_path}")

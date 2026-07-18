@@ -69,7 +69,7 @@ def main():
     client = VARWebSocketClient()
     tester = VARTester()
 
-    results_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "VARGrowthModel", "results2")
+    results_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "VARGrowthModel", "price_comparison_results")
 
     for symbol in symbols:
         print(f"\nFetching OHLCV data for {symbol}...")
@@ -112,7 +112,7 @@ def main():
         print(f"Dividend Discount Model: ${metrics['ddm_intrinsic_value']:.0f}")
         print(f"Discounted Cash Flow:    ${metrics['dcf_intrinsic_value']:.0f}")
         print("="*50)
-        print(f"Forecast plot saved to:  {results_dir}/{symbol}_forecast.png")
+        print(f"Forecast plot saved to:  {results_dir}/{symbol}_price_comparison.png")
         print("="*50 + "\n")
 
 if __name__ == "__main__":

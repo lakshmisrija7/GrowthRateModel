@@ -31,13 +31,73 @@ class KalmanDFM:
                 self.h_r = max(float(np.var(daily_returns)), 0.01)
                 self.h_f = max(float(np.var(sparse_quarterly.dropna())), 0.01)
 
+        best_mse = float("inf")
+        best_phi = self.phi
+        best_q = self.q
+
+        phi_grid = [0.90, 0.95, 0.98]
+        q_grid = [0.05, 0.1, 0.2]
+
         returns_np = daily_returns.to_numpy()
         dates_np = daily_returns.index.to_numpy()
         n = len(daily_returns)
 
+        if len(idx_report) >= 3:
+            for phi in phi_grid:
+                for q in q_grid:
+                    f_val = 0.0
+                    p_val = 1.0
+                    temp_f_state = np.zeros(n)
+                    for t in range(n):
+                        f_pred = phi * f_val
+                        p_pred = (phi ** 2) * p_val + q
+
+                        date_t = dates_np[t]
+                        val_f = sparse_quarterly.loc[date_t] if date_t in sparse_quarterly.index else np.nan
+                        r_val = returns_np[t]
+
+                        if not np.isnan(val_f):
+                            y = np.array([[r_val], [val_f - self.f_mean]])
+                            C = np.array([[self.lambda_r], [self.lambda_f]])
+                            R_cov = np.array([[self.h_r, 0.0], [0.0, self.h_f]])
+                            
+                            S = C @ np.array([[p_pred]]) @ C.T + R_cov
+                            S_inv = np.linalg.inv(S)
+                            K = p_pred * C.T @ S_inv
+                            
+                            innov = y - C * f_pred
+                            f_val = f_pred + float(K @ innov)
+                            p_val = float((1.0 - K @ C) * p_pred)
+                        else:
+                            y = r_val
+                            C = self.lambda_r
+                            R_cov = self.h_r
+                            
+                            S = (C ** 2) * p_pred + R_cov
+                            K = (p_pred * C) / S
+                            innov = y - C * f_pred
+                            f_val = f_pred + K * innov
+                            p_val = (1.0 - K * C) * p_pred
+                        temp_f_state[t] = f_val
+                    
+                    temp_preds = self.f_mean + self.lambda_f * temp_f_state
+                    errors = []
+                    for d in idx_report:
+                        matches = np.where(dates_np == d)[0]
+                        if len(matches) > 0:
+                            errors.append(sparse_quarterly.loc[d] - temp_preds[matches[0]])
+                    if errors:
+                        mse = np.mean(np.array(errors) ** 2)
+                        if mse < best_mse:
+                            best_mse = mse
+                            best_phi = phi
+                            best_q = q
+
+            self.phi = best_phi
+            self.q = best_q
+
         f_state = np.zeros(n)
         p_state = np.zeros(n)
-        
         f_val = 0.0
         p_val = 1.0
 
@@ -47,7 +107,6 @@ class KalmanDFM:
 
             date_t = dates_np[t]
             val_f = sparse_quarterly.loc[date_t] if date_t in sparse_quarterly.index else np.nan
-            
             r_val = returns_np[t]
 
             if not np.isnan(val_f):

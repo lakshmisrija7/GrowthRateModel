@@ -1,13 +1,51 @@
 import os
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 from .training import VARTrainer
 from .architecture import VectorAutoregressionModel
 from IntrinsicValueModels import DividendDiscountModel, DiscountedCashFlowModel
 
+REFIT_EVERY = 20
+
 class VARTester:
     def __init__(self, trainer: VARTrainer = None):
         self.trainer = trainer or VARTrainer()
+
+    def _walk_forward_predictions(self, df_growth, ohlcv_list, lags, alpha, close_idx):
+        n = len(df_growth)
+        data_np = df_growth.to_numpy()
+        actual_prices = [item.close for item in ohlcv_list]
+
+        current_model = None
+        wf_dates_idx = []
+        wf_predicted = []
+
+        for t in range(lags, n):
+            if t % REFIT_EVERY == 0 or current_model is None:
+                temp_data = data_np[:t]
+                if len(temp_data) > lags:
+                    current_model = VectorAutoregressionModel(lags=lags, alpha=alpha)
+                    current_model.fit(temp_data)
+
+            if current_model is None:
+                continue
+
+            past = data_np[:t]
+            std_past = (past - current_model.means) / current_model.stds
+            row = [1.0]
+            for lag in range(1, current_model.lags + 1):
+                row.extend(std_past[-lag])
+            pred_std = np.array(row) @ current_model.coefficients
+            pred_growth = pred_std * current_model.stds + current_model.means
+            pred_g = float(np.clip(pred_growth[close_idx], -0.15, 0.15))
+            pred_price = actual_prices[t - 1] * (1.0 + pred_g)
+
+            wf_dates_idx.append(t)
+            wf_predicted.append(pred_price)
+
+        return wf_dates_idx, wf_predicted
 
     def evaluate(self, ohlcv_list: list, scores_list: list = None, fundamental_list: list = None, results_dir: str = None) -> dict:
         if not ohlcv_list or len(ohlcv_list) <= self.trainer.lags:
@@ -16,14 +54,14 @@ class VARTester:
         df_growth = self.trainer.prepare_data(ohlcv_list, scores_list, fundamental_list)
         n_samples = len(df_growth)
         train_size = int(n_samples * 0.8)
-        
+
         train_np = df_growth.to_numpy()[:train_size]
         test_np = df_growth.to_numpy()[train_size:]
 
         lags_train, alpha_train = self.trainer.tune_hyperparameters(train_np)
         model = VectorAutoregressionModel(lags=lags_train, alpha=alpha_train)
         model.fit(train_np)
-        
+
         test_steps = len(test_np)
         forecasts = model.forecast(train_np, steps=test_steps)
 
@@ -38,57 +76,88 @@ class VARTester:
         full_model = VectorAutoregressionModel(lags=lags_full, alpha=alpha_full)
         full_model.fit(df_growth.to_numpy())
 
+        future_forecasts = full_model.forecast(df_growth.to_numpy(), steps=504)
+
         if results_dir:
-            os.makedirs(results_dir, exist_ok=True)
-            import pandas as pd
-            import matplotlib.dates as mdates
+            price_comp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "price_comparison_results")
+            os.makedirs(price_comp_dir, exist_ok=True)
 
             symbol = ohlcv_list[0].symbol if ohlcv_list else "VAR"
             actual_prices = [item.close for item in ohlcv_list]
             actual_dates = [pd.to_datetime(item.time, unit="ms") for item in ohlcv_list]
 
-            lags = full_model.lags
-            predicted_prices = list(actual_prices)
-            std_growth = (df_growth.to_numpy() - full_model.means) / full_model.stds
-            for t in range(lags, len(df_growth)):
-                row = [1.0]
-                for lag in range(1, lags + 1):
-                    row.extend(std_growth[t - lag])
-                pred_growth_std = np.array(row) @ full_model.coefficients
-                pred_growth = pred_growth_std * full_model.stds + full_model.means
-                pred_close_g = pred_growth[close_idx]
-                predicted_prices[t + 1] = ohlcv_list[t].close * (1.0 + pred_close_g)
+            wf_idx, wf_predicted = self._walk_forward_predictions(
+                df_growth, ohlcv_list, lags_full, alpha_full, close_idx
+            )
+            wf_actual = [actual_prices[i] for i in wf_idx]
+            wf_dates = [actual_dates[i] for i in wf_idx]
 
-            future_forecasts = full_model.forecast(df_growth.to_numpy(), steps=504)
-            current_price = predicted_prices[-1]
+            residuals = np.array(wf_actual) - np.array(wf_predicted)
+            residual_std = float(np.std(residuals))
+
+            boundary_date = actual_dates[train_size] if train_size < len(actual_dates) else actual_dates[-1]
+
+            future_dates = pd.date_range(
+                start=actual_dates[-1] + pd.offsets.BDay(), periods=504, freq="B"
+            )
+
+            log_returns_hist = np.diff(np.log(np.maximum(actual_prices, 1e-6)))
+            daily_log_std = float(np.std(log_returns_hist)) if len(log_returns_hist) > 1 else 0.01
+
+            rng = np.random.default_rng(42)
+            future_log_prices = []
+            log_current = np.log(max(actual_prices[-1], 1e-6))
             for pred_g in future_forecasts[:, close_idx]:
-                next_price = current_price * (1.0 + pred_g)
-                predicted_prices.append(next_price)
-                current_price = next_price
+                clipped_g = float(np.clip(pred_g, -0.05, 0.05))
+                noise = rng.normal(0, daily_log_std * 0.25)
+                log_current = log_current + clipped_g + noise
+                future_log_prices.append(np.exp(log_current))
+            future_prices = future_log_prices
 
-            last_date = actual_dates[-1]
-            future_dates = pd.date_range(start=last_date + pd.offsets.BDay(), periods=504, freq="B")
-            predicted_dates = actual_dates + list(future_dates)
+            train_idx_mask = [i < train_size for i in wf_idx]
+            test_idx_mask = [i >= train_size for i in wf_idx]
 
-            plt.figure(figsize=(16, 6))
-            plt.plot(actual_dates, actual_prices, label="Actual Growth (Daily)", color="#3b4cc0", linewidth=1.0)
-            plt.plot(predicted_dates, predicted_prices, label="In-Sample Predicted Growth", color="#ff3b30", linestyle="--", linewidth=1.0)
-            
-            plt.gca().xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
-            plt.gca().xaxis.set_major_locator(mdates.YearLocator())
-            plt.gcf().autofmt_xdate()
+            insample_dates = [d for d, m in zip(wf_dates, train_idx_mask) if m]
+            insample_actual = [p for p, m in zip(wf_actual, train_idx_mask) if m]
+            insample_pred = [p for p, m in zip(wf_predicted, train_idx_mask) if m]
 
-            plt.title(f"VAR Actual vs Predicted Growth Rate - {symbol}", fontsize=12)
-            plt.xlabel("Timeline", fontsize=10)
-            plt.ylabel("Growth Rate", fontsize=10)
-            plt.legend(loc="upper left")
-            plt.grid(True, linestyle=":", alpha=0.6)
+            outsample_dates = [d for d, m in zip(wf_dates, test_idx_mask) if m]
+            outsample_actual = [p for p, m in zip(wf_actual, test_idx_mask) if m]
+            outsample_pred = [p for p, m in zip(wf_predicted, test_idx_mask) if m]
+
+            fig, ax = plt.subplots(figsize=(16, 6))
+
+            ax.plot(insample_dates, insample_actual,
+                    color="steelblue", alpha=0.8, linewidth=1.2, label="Actual Stock Price")
+            ax.plot(insample_dates, insample_pred,
+                    color="tomato", linestyle="--", alpha=0.85, linewidth=1.2, label="Predicted Stock Price")
+
+            if outsample_dates:
+                ax.plot(outsample_dates, outsample_actual,
+                        color="steelblue", alpha=0.8, linewidth=1.2)
+                ax.plot(outsample_dates, outsample_pred,
+                        color="tomato", linestyle="--", alpha=0.85, linewidth=1.2)
+
+            ax.plot(future_dates, future_prices,
+                    color="tomato", linestyle="--", alpha=0.85, linewidth=1.2)
+
+            ax.axvline(x=boundary_date, color="dimgray", linestyle=":", linewidth=1.5,
+                       label=f"Training End ({boundary_date.date()})")
+
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
+            ax.xaxis.set_major_locator(mdates.MonthLocator(interval=6))
+            fig.autofmt_xdate(rotation=45)
+
+            ax.set_title(f"VAR: Actual vs Predicted 2-Year Forward Stock Price ({symbol}, from 2015)")
+            ax.set_xlabel("Date")
+            ax.set_ylabel("Stock Price (USD)")
+            ax.legend()
+            ax.grid(True, linestyle=":", alpha=0.5)
+
             plt.tight_layout()
-            plt.savefig(os.path.join(results_dir, f"{symbol}_forecast.png"), dpi=300)
+            plt.savefig(os.path.join(price_comp_dir, f"{symbol}_price_comparison.png"), dpi=300, bbox_inches="tight")
             plt.close()
 
-        future_forecasts = full_model.forecast(df_growth.to_numpy(), steps=504)
-        
         annual_growths = []
         for year in range(2):
             start_idx = year * 252
