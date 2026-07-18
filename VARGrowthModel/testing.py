@@ -20,8 +20,8 @@ class VARTester:
         train_np = df_growth.to_numpy()[:train_size]
         test_np = df_growth.to_numpy()[train_size:]
 
-        lags_train = self.trainer.tune_lags(train_np)
-        model = VectorAutoregressionModel(lags=lags_train)
+        lags_train, alpha_train = self.trainer.tune_hyperparameters(train_np)
+        model = VectorAutoregressionModel(lags=lags_train, alpha=alpha_train)
         model.fit(train_np)
         
         test_steps = len(test_np)
@@ -34,8 +34,8 @@ class VARTester:
         mse = np.mean((actual_close_growth - pred_close_growth) ** 2)
         mae = np.mean(np.abs(actual_close_growth - pred_close_growth))
 
-        lags_full = self.trainer.tune_lags(df_growth.to_numpy())
-        full_model = VectorAutoregressionModel(lags=lags_full)
+        lags_full, alpha_full = self.trainer.tune_hyperparameters(df_growth.to_numpy())
+        full_model = VectorAutoregressionModel(lags=lags_full, alpha=alpha_full)
         full_model.fit(df_growth.to_numpy())
 
         if results_dir:
@@ -49,11 +49,13 @@ class VARTester:
 
             lags = full_model.lags
             predicted_prices = list(actual_prices)
+            std_growth = (df_growth.to_numpy() - full_model.means) / full_model.stds
             for t in range(lags, len(df_growth)):
                 row = [1.0]
                 for lag in range(1, lags + 1):
-                    row.extend(df_growth.to_numpy()[t - lag])
-                pred_growth = np.array(row) @ full_model.coefficients
+                    row.extend(std_growth[t - lag])
+                pred_growth_std = np.array(row) @ full_model.coefficients
+                pred_growth = pred_growth_std * full_model.stds + full_model.means
                 pred_close_g = pred_growth[close_idx]
                 predicted_prices[t + 1] = ohlcv_list[t].close * (1.0 + pred_close_g)
 

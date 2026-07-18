@@ -113,7 +113,7 @@ class ARIMATester:
         }
 
     def _save_results_plot(self, df_insample: pd.DataFrame, df_outsample: pd.DataFrame, symbol: str = "STOCK"):
-        results_dir = os.path.join(os.path.dirname(__file__), "results2")
+        results_dir = os.path.join(os.path.dirname(__file__), "results")
         os.makedirs(results_dir, exist_ok=True)
         plot_path = os.path.join(results_dir, f"{symbol}_valuation_forecast.png")
 

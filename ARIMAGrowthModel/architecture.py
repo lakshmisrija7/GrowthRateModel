@@ -14,18 +14,39 @@ class ARIMAModelArchitecture:
         self.model_fit = None
         self.fitted_features = []
         self.train_len = 0
+        self.exog_means = None
+        self.exog_stds = None
 
     def fit_model(self, endog: pd.Series, exog_full: pd.DataFrame, feature_cols: list):
         self.train_len = len(endog)
         exog = exog_full[feature_cols].fillna(0.0)
         exog = exog.loc[:, exog.nunique() > 1]
-        
-        if exog.empty:
+
+        if not exog.empty:
+            corrs = exog.corrwith(endog).abs().sort_values(ascending=False)
+            selected = []
+            for feat in corrs.index:
+                collinear = False
+                for sel in selected:
+                    if abs(exog[feat].corr(exog[sel])) > 0.8:
+                        collinear = True
+                        break
+                if not collinear:
+                    selected.append(feat)
+                if len(selected) >= 5:
+                    break
+            exog = exog[selected]
+            self.fitted_features = list(exog.columns)
+            self.exog_means = exog.mean()
+            self.exog_stds = exog.std()
+            self.exog_stds[self.exog_stds == 0.0] = 1.0
+            exog = (exog - self.exog_means) / self.exog_stds
+            logger.info(f"Selected non-collinear features: {self.fitted_features}")
+        else:
             exog = None
             self.fitted_features = []
-        else:
-            self.fitted_features = list(exog.columns)
-            logger.info(f"Filtered training features: {self.fitted_features}")
+            self.exog_means = None
+            self.exog_stds = None
 
         best_aic = float("inf")
         best_order = (self.p, self.d, self.q)
@@ -53,13 +74,6 @@ class ARIMAModelArchitecture:
             raise ValuationError(f"Model fitting failed: {e}") from e
 
     def predict_in_sample(self, endog: pd.Series, exog_full: pd.DataFrame) -> pd.Series:
-        """
-        Walk-forward 5-year forecast at each training date.
-        At each date t, trains on data[0..t-1] and forecasts 1260 steps (5 years) ahead.
-        The mean of those 1260 forecasts is the predicted 5-year growth rate at t —
-        matching the same horizon as the actual growth target.
-        Subsamples every STEP_DAYS and interpolates for efficiency.
-        """
         if self.model_fit is None:
             raise ValuationError("Model has not been trained yet")
 
@@ -68,7 +82,11 @@ class ARIMAModelArchitecture:
         STEP = 5
         min_train = max(self.p + self.q + 2, 10)
 
-        exog = exog_full[self.fitted_features].fillna(0.0) if self.fitted_features else None
+        if self.fitted_features:
+            exog = exog_full[self.fitted_features].fillna(0.0)
+            exog = (exog - self.exog_means) / self.exog_stds
+        else:
+            exog = None
 
         sample_indices = []
         sample_preds = []
@@ -98,7 +116,6 @@ class ARIMAModelArchitecture:
             sample_indices.append(t)
             sample_preds.append(pred)
 
-        # Interpolate sample predictions across all n indices
         sparse = pd.Series(sample_preds, index=sample_indices)
         full = sparse.reindex(range(n)).interpolate(method="linear").ffill().bfill()
         if sample_preds:
@@ -113,7 +130,8 @@ class ARIMAModelArchitecture:
             
         exog_forecast = None
         if self.fitted_features:
-            exog_forecast = pd.DataFrame([last_exog[self.fitted_features]] * steps)
+            std_last_exog = (last_exog[self.fitted_features] - self.exog_means) / self.exog_stds
+            exog_forecast = pd.DataFrame([std_last_exog] * steps)
             exog_forecast.index = range(self.train_len, self.train_len + steps)
             
         try:
