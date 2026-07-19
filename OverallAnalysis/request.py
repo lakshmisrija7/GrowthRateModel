@@ -27,22 +27,8 @@ class OverallAnalysisFilter:
 
 
 class OverallAnalysisRequest:
-    """
-    Builds the WebSocket request payload for GET_OVERALL_ANALYSIS.
 
-    Sample message:
-    {
-        "type": "overallAnalysis",
-        "action": "GET_OVERALL_ANALYSIS",
-        "filter": {
-            "symbol": "LLY",
-            "dateRange": {
-                "fromDate": "977219570000",
-                "toDate": "1766137976000"
-            }
-        }
-    }
-    """
+
 
     def __init__(self, symbol: str, from_date: str, to_date: str):
         self.type = "overallAnalysis"

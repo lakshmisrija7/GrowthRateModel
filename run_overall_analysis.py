@@ -1,9 +1,5 @@
-"""
-run_overall_analysis.py
 
-Fetches overall analysis for UBER, NVDA, APP, LLY, AVGO and saves
-per-symbol result summaries as PNG bar charts in OverallAnalysis/results/.
-"""
+
 
 import asyncio
 import os
@@ -37,7 +33,7 @@ SCORE_FIELDS = [
 
 
 def save_score_bar_plot(symbol: str, summary: dict):
-    """Save a bar chart of the latest score breakdown for a symbol."""
+
     os.makedirs(RESULTS_DIR, exist_ok=True)
     plot_path = os.path.join(RESULTS_DIR, f"{symbol}_overall_analysis.png")
 
@@ -83,21 +79,14 @@ def save_score_bar_plot(symbol: str, summary: dict):
     ax.grid(axis="y", linestyle=":", alpha=0.5)
     ax.spines[["top", "right"]].set_visible(False)
 
-    insights = summary.get("insights")
-    if insights:
-        fig.text(
-            0.5, 0.01, f"Insights: {str(insights)[:120]}",
-            ha="center", fontsize=9, color="#555555", style="italic"
-        )
-
-    plt.tight_layout(rect=[0, 0.04, 1, 1])
+    plt.tight_layout()
     plt.savefig(plot_path, dpi=300, bbox_inches="tight")
     plt.close()
     logger.info(f"[{symbol}] Bar chart saved to {plot_path}")
 
 
 def save_timeseries_plot(symbol: str, all_scores: list):
-    """Save a time-series plot of overallScore over time for a symbol."""
+
     os.makedirs(RESULTS_DIR, exist_ok=True)
     plot_path = os.path.join(RESULTS_DIR, f"{symbol}_overall_timeseries.png")
 

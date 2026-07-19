@@ -6,7 +6,7 @@ logger = get_logger("runner")
 
 SYMBOLS = ["UBER", "NVDA", "APP", "LLY", "AVGO"]
 
-# Training window: Jan 2015 – Jan 2020
+
 FROM_DATE = 1420070400000
 TO_DATE   = 1577836800000
 
@@ -14,7 +14,7 @@ FEATURE_COLS = [
     "tech_trend", "tech_momentum", "tech_volatility", "tech_rsi", "tech_adx",
     "sec_pe", "sec_roe", "sec_npm", "sec_sector_pe", "sec_sector_roe",
     "sent_score", "sent_confidence",
-    # Overall Analysis scores
+    
     "overall_overallScore", "overall_technicalScore", "overall_fundamentalScore",
     "overall_sentimentScore", "overall_industryScore", "overall_riskScore",
 ]

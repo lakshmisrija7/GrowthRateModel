@@ -16,7 +16,7 @@ from DynamicFactorModelKalmanFilteringMetricModel import KalmanDFM
 
 logger = get_logger(__name__)
 
-WS_URL = "wss://app.asense.ai/wsasense"
+WS_URL = "wss://asense.assetsense.com/wsasense"
 FALLBACK_SYMBOL = "NVDA"
 
 class ARIMADataLoader:

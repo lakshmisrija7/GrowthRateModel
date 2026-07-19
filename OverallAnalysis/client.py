@@ -10,10 +10,8 @@ logger = get_logger(__name__)
 
 
 class OverallAnalysisClient:
-    """
-    WebSocket client for fetching overall analysis data.
-    Follows the same connect / fetch / disconnect lifecycle as all other analysis clients.
-    """
+
+
 
     def __init__(self, url: str = WS_URL, api_key: str = API_KEY):
         self.url = url
@@ -54,17 +52,8 @@ class OverallAnalysisClient:
         from_date: str,
         to_date: str
     ) -> OverallAnalysisResponse:
-        """
-        Send GET_OVERALL_ANALYSIS request and return the parsed response.
 
-        Args:
-            symbol:    Ticker symbol (e.g. "LLY")
-            from_date: Start timestamp in milliseconds as a string
-            to_date:   End timestamp in milliseconds as a string
 
-        Returns:
-            OverallAnalysisResponse instance
-        """
         if not self.connection:
             raise ConnectionError("Not connected to WebSocket. Call connect() first.")
 
