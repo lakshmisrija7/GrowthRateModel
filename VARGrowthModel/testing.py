@@ -47,7 +47,7 @@ class VARTester:
 
         return wf_dates_idx, wf_predicted
 
-    def evaluate(self, ohlcv_list: list, scores_list: list = None, fundamental_list: list = None, results_dir: str = None) -> dict:
+    def evaluate(self, ohlcv_list: list, scores_list: list = None, fundamental_list: list = None, results_dir: str = None, client = None) -> dict:
         if not ohlcv_list or len(ohlcv_list) <= self.trainer.lags:
             raise ValueError("No data or insufficient data available for testing")
 
@@ -76,13 +76,24 @@ class VARTester:
         full_model = VectorAutoregressionModel(lags=lags_full, alpha=alpha_full)
         full_model.fit(df_growth.to_numpy())
 
-        future_forecasts = full_model.forecast(df_growth.to_numpy(), steps=504)
+        symbol = ohlcv_list[0].symbol if ohlcv_list else "VAR"
+
+        future_ohlcv = []
+        if client:
+            last_item = ohlcv_list[-1]
+            future_from_ms = str(last_item.time)
+            future_to_ms = str(int(last_item.time) + 2 * 365 * 24 * 60 * 60 * 1000)
+            try:
+                future_response = client.fetch(symbol, future_from_ms, future_to_ms)
+                if future_response and future_response.data:
+                    future_ohlcv = future_response.data
+            except Exception:
+                pass
 
         if results_dir:
             price_comp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "price_comparison_results")
             os.makedirs(price_comp_dir, exist_ok=True)
 
-            symbol = ohlcv_list[0].symbol if ohlcv_list else "VAR"
             actual_prices = [item.close for item in ohlcv_list]
             actual_dates = [pd.to_datetime(item.time, unit="ms") for item in ohlcv_list]
 
@@ -92,38 +103,36 @@ class VARTester:
             wf_actual = [actual_prices[i] for i in wf_idx]
             wf_dates = [actual_dates[i] for i in wf_idx]
 
-            residuals = np.array(wf_actual) - np.array(wf_predicted)
-            residual_std = float(np.std(residuals))
+            boundary_date = actual_dates[-1]
 
-            boundary_date = actual_dates[train_size] if train_size < len(actual_dates) else actual_dates[-1]
+            if future_ohlcv:
+                outsample_dates = [pd.to_datetime(item.time, unit="ms") for item in future_ohlcv]
+                outsample_actual = [item.close for item in future_ohlcv]
+                steps = len(future_ohlcv)
+            else:
+                outsample_dates = pd.date_range(
+                    start=actual_dates[-1] + pd.offsets.BDay(), periods=504, freq="B"
+                )
+                outsample_actual = [actual_prices[-1]] * len(outsample_dates)
+                steps = 504
 
-            future_dates = pd.date_range(
-                start=actual_dates[-1] + pd.offsets.BDay(), periods=504, freq="B"
-            )
+            future_forecasts = full_model.forecast(df_growth.to_numpy(), steps=steps)
 
             log_returns_hist = np.diff(np.log(np.maximum(actual_prices, 1e-6)))
             daily_log_std = float(np.std(log_returns_hist)) if len(log_returns_hist) > 1 else 0.01
 
             rng = np.random.default_rng(42)
-            future_log_prices = []
+            outsample_pred = []
             log_current = np.log(max(actual_prices[-1], 1e-6))
             for pred_g in future_forecasts[:, close_idx]:
                 clipped_g = float(np.clip(pred_g, -0.05, 0.05))
-                noise = rng.normal(0, daily_log_std * 0.25)
-                log_current = log_current + clipped_g + noise
-                future_log_prices.append(np.exp(log_current))
-            future_prices = future_log_prices
+                noise = rng.normal(0, daily_log_std)
+                log_current = log_current + np.log(1.0 + clipped_g) + noise
+                outsample_pred.append(np.exp(log_current))
 
-            train_idx_mask = [i < train_size for i in wf_idx]
-            test_idx_mask = [i >= train_size for i in wf_idx]
-
-            insample_dates = [d for d, m in zip(wf_dates, train_idx_mask) if m]
-            insample_actual = [p for p, m in zip(wf_actual, train_idx_mask) if m]
-            insample_pred = [p for p, m in zip(wf_predicted, train_idx_mask) if m]
-
-            outsample_dates = [d for d, m in zip(wf_dates, test_idx_mask) if m]
-            outsample_actual = [p for p, m in zip(wf_actual, test_idx_mask) if m]
-            outsample_pred = [p for p, m in zip(wf_predicted, test_idx_mask) if m]
+            insample_dates = wf_dates
+            insample_actual = wf_actual
+            insample_pred = wf_predicted
 
             fig, ax = plt.subplots(figsize=(16, 6))
 
@@ -132,14 +141,11 @@ class VARTester:
             ax.plot(insample_dates, insample_pred,
                     color="tomato", linestyle="--", alpha=0.85, linewidth=1.2, label="Predicted Stock Price")
 
-            if outsample_dates:
+            if list(outsample_dates):
                 ax.plot(outsample_dates, outsample_actual,
                         color="steelblue", alpha=0.8, linewidth=1.2)
                 ax.plot(outsample_dates, outsample_pred,
                         color="tomato", linestyle="--", alpha=0.85, linewidth=1.2)
-
-            ax.plot(future_dates, future_prices,
-                    color="tomato", linestyle="--", alpha=0.85, linewidth=1.2)
 
             ax.axvline(x=boundary_date, color="dimgray", linestyle=":", linewidth=1.5,
                        label=f"Training End ({boundary_date.date()})")
@@ -158,11 +164,12 @@ class VARTester:
             plt.savefig(os.path.join(price_comp_dir, f"{symbol}_price_comparison.png"), dpi=300, bbox_inches="tight")
             plt.close()
 
+        future_forecasts_full = full_model.forecast(df_growth.to_numpy(), steps=504)
         annual_growths = []
         for year in range(2):
             start_idx = year * 252
             end_idx = (year + 1) * 252
-            year_forecasts = future_forecasts[start_idx:end_idx, close_idx]
+            year_forecasts = future_forecasts_full[start_idx:end_idx, close_idx]
             annual_g = np.prod(1.0 + year_forecasts) - 1.0
             annual_growths.append(annual_g)
 
@@ -189,5 +196,5 @@ class VARTester:
             "annual_growths": annual_growths,
             "ddm_intrinsic_value": ddm_val,
             "dcf_intrinsic_value": dcf_val,
-            "daily_forecasts": future_forecasts[:10, close_idx].tolist()
+            "daily_forecasts": future_forecasts_full[:10, close_idx].tolist()
         }

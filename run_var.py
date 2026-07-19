@@ -57,8 +57,8 @@ def fetch_fundamentals(symbol: str, from_date: str, to_date: str) -> list:
 
 def main():
     symbols = ["UBER", "NVDA", "APP", "LLY", "AVGO"]
-    from_date = "1577836800000"
-    to_date = "1735689599000"
+    from_date = "1420070400000"
+    to_date = "1577836800000"
 
     logging.getLogger("IntrinsicValueModels.ddm").setLevel(logging.WARNING)
     logging.getLogger("IntrinsicValueModels.dcf").setLevel(logging.WARNING)
@@ -88,7 +88,7 @@ def main():
 
         print(f"Successfully retrieved {len(ohlcv_list)} price points, {len(scores_list)} score points, and {len(fundamental_list)} fundamental reports for {symbol}.")
         print(f"Running training and testing for {symbol}...")
-        metrics = tester.evaluate(ohlcv_list, scores_list, fundamental_list, results_dir=results_dir)
+        metrics = tester.evaluate(ohlcv_list, scores_list, fundamental_list, results_dir=results_dir, client=client)
 
         print("\n" + "="*50)
         print(f"VAR MODEL TEST REPORT (WITH SCORES) - {symbol}")
