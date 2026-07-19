@@ -15,7 +15,7 @@ from OverallAnalysis.logger import get_logger
 
 logger = get_logger("overall_runner")
 
-SYMBOLS = ["UBER", "NVDA", "APP", "LLY", "AVGO"]
+SYMBOLS = ["PLTR", "NVDA", "APP", "LLY", "AVGO"]
 
 FROM_DATE = "977219570000"
 TO_DATE   = "1766137976000"

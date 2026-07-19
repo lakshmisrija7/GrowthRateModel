@@ -4,7 +4,7 @@ from ARIMAGrowthModel.logger import get_logger
 
 logger = get_logger("runner")
 
-SYMBOLS = ["UBER", "NVDA", "APP", "LLY", "AVGO"]
+SYMBOLS = ["PLTR", "NVDA", "APP", "LLY", "AVGO"]
 
 
 FROM_DATE = 1420070400000

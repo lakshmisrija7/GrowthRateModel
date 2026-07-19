@@ -21,7 +21,11 @@ class FundamentalWebSocketClient:
             if self.api_key:
                 headers["X-API-KEY"] = self.api_key
                 headers["X_API_KEY"] = self.api_key
-            self.connection = await websockets.connect(self.url, extra_headers=headers, max_size=None)
+            import inspect
+            sig = inspect.signature(websockets.connect)
+            headers_key = "additional_headers" if "additional_headers" in sig.parameters else "extra_headers"
+            kwargs = {headers_key: headers, "max_size": None}
+            self.connection = await websockets.connect(self.url, **kwargs)
             logger.info("Successfully connected to WebSocket")
         except Exception as e:
             logger.error(f"Failed to connect to {self.url}: {e}")

@@ -30,7 +30,11 @@ class ARIMADataLoader:
         if self.api_key:
             headers["x-api-key"] = self.api_key
         try:
-            async with websockets.connect(WS_URL, extra_headers=headers, max_size=None, ping_interval=None) as ws:
+            import inspect
+            sig = inspect.signature(websockets.connect)
+            headers_key = "additional_headers" if "additional_headers" in sig.parameters else "extra_headers"
+            kwargs = {headers_key: headers, "max_size": None, "ping_interval": None}
+            async with websockets.connect(WS_URL, **kwargs) as ws:
                 req = {
                     "type": "ohlcvData",
                     "action": "GET_OHLCV_DATA",

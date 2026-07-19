@@ -24,7 +24,11 @@ class SentimentTrendAnalysisFetcher:
         self._headers = self._headers
         self._logger.info(f"Connecting to {self._url} for sentiment trend analysis of {category}")
         try:
-            async with websockets.connect(self._url, extra_headers=self._headers, max_size=None) as websocket:
+            import inspect
+            sig = inspect.signature(websockets.connect)
+            headers_key = "additional_headers" if "additional_headers" in sig.parameters else "extra_headers"
+            kwargs = {headers_key: self._headers, "max_size": None}
+            async with websockets.connect(self._url, **kwargs) as websocket:
                 self._logger.info("Sending request payload")
                 await websocket.send(json.dumps(payload))
                 response = await websocket.recv()

@@ -56,7 +56,7 @@ def fetch_fundamentals(symbol: str, from_date: str, to_date: str) -> list:
             return future.result()
 
 def main():
-    symbols = ["UBER", "NVDA", "APP", "LLY", "AVGO"]
+    symbols = ["PLTR", "NVDA", "APP", "LLY", "AVGO"]
     from_date = "1420070400000"
     to_date = "1577836800000"
 
