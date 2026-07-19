@@ -184,8 +184,7 @@ class ARIMADataLoader:
                     "overall_technicalScore": _safe_float(scores.get("technicalScore")),
                     "overall_fundamentalScore": _safe_float(scores.get("fundamentalScore")),
                     "overall_sentimentScore": _safe_float(scores.get("sentimentScore")),
-                    "overall_industryScore":  _safe_float(scores.get("industryScore")),
-                    "overall_riskScore":      _safe_float(scores.get("riskScore")),
+                    "overall_sectorScore":  _safe_float(scores.get("sectorScore")),
                 })
         except Exception as e:
             logger.warning(f"Overall analysis fetch failed for {self.symbol}: {e}")
@@ -246,7 +245,7 @@ class ARIMADataLoader:
 
         overall_cols = [
             "overall_overallScore", "overall_technicalScore", "overall_fundamentalScore",
-            "overall_sentimentScore", "overall_industryScore", "overall_riskScore"
+            "overall_sentimentScore", "overall_sectorScore"
         ]
         if not df_overall.empty:
             df_align = df_align.merge(df_overall, on="date", how="left")

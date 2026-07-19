@@ -36,8 +36,7 @@ class OverallAnalysisResponse:
             "technicalScore":   ratio.get("technicalScore"),
             "fundamentalScore": ratio.get("fundamentalScore"),
             "sentimentScore":   ratio.get("sentimentScore"),
-            "industryScore":    ratio.get("industryScore"),
-            "riskScore":        ratio.get("riskScore"),
+            "sectorScore":    ratio.get("sectorScore"),
             "action":           ratio.get("action"),
         }
 

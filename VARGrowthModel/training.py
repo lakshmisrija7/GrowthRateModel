@@ -35,21 +35,20 @@ class VARTrainer:
                         "technicalScore": s.get("technicalScore"),
                         "fundamentalScore": s.get("fundamentalScore"),
                         "sentimentScore": s.get("sentimentScore"),
-                        "industryScore": s.get("industryScore"),
-                        "riskScore": s.get("riskScore")
+                        "sectorScore": s.get("sectorScore")
                     })
             if scores_data:
                 df_scores = pd.DataFrame(scores_data)
                 df_scores = df_scores.replace('-', np.nan)
-                score_cols = ["overallScore", "technicalScore", "fundamentalScore", "sentimentScore", "industryScore", "riskScore"]
+                score_cols = ["overallScore", "technicalScore", "fundamentalScore", "sentimentScore", "sectorScore"]
                 for col in score_cols:
                     if col in df_scores.columns:
                         df_scores[col] = pd.to_numeric(df_scores[col], errors='coerce')
                 df_scores = df_scores.groupby("date").mean()
             else:
-                df_scores = pd.DataFrame(columns=["overallScore", "technicalScore", "fundamentalScore", "sentimentScore", "industryScore", "riskScore"])
+                df_scores = pd.DataFrame(columns=["overallScore", "technicalScore", "fundamentalScore", "sentimentScore", "sectorScore"])
         else:
-            df_scores = pd.DataFrame(columns=["overallScore", "technicalScore", "fundamentalScore", "sentimentScore", "industryScore", "riskScore"])
+            df_scores = pd.DataFrame(columns=["overallScore", "technicalScore", "fundamentalScore", "sentimentScore", "sectorScore"])
 
         df_price_growth = df_ohlcv.pct_change().dropna()
         df_price_growth = df_price_growth.replace([np.inf, -np.inf], 0.0).fillna(0.0)
@@ -57,7 +56,7 @@ class VARTrainer:
         df_merged = df_price_growth.join(df_scores, how="left")
         df_merged = df_merged.ffill().bfill()
 
-        score_cols = ["overallScore", "technicalScore", "fundamentalScore", "sentimentScore", "industryScore", "riskScore"]
+        score_cols = ["overallScore", "technicalScore", "fundamentalScore", "sentimentScore", "sectorScore"]
         for col in score_cols:
             if col not in df_merged.columns:
                 df_merged[col] = 5.0

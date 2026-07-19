@@ -16,7 +16,7 @@ FEATURE_COLS = [
     "sent_score", "sent_confidence",
     
     "overall_overallScore", "overall_technicalScore", "overall_fundamentalScore",
-    "overall_sentimentScore", "overall_industryScore", "overall_riskScore",
+    "overall_sentimentScore", "overall_sectorScore",
 ]
 FUND_COLS = ["fund_cashHealth", "fund_leverage", "fund_liquidity", "fund_profitability"]
 

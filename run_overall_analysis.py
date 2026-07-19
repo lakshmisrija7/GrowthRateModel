@@ -27,8 +27,7 @@ SCORE_FIELDS = [
     ("technicalScore",   "Technical",   "#55A868"),
     ("fundamentalScore", "Fundamental", "#C44E52"),
     ("sentimentScore",   "Sentiment",   "#8172B2"),
-    ("industryScore",    "Industry",    "#CCB974"),
-    ("riskScore",        "Risk",        "#64B5CD"),
+    ("sectorScore",    "sector",    "#CCB974"),
 ]
 
 
